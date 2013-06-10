@@ -1,0 +1,58 @@
+Sections needed
+
+	- user (u_id, g_id, paid/not-paid, logged in?, member/regular, premium, user_level etc)
+	- ids (c_id, cm_id, ce_id, t_id, etc)
+	- slide info (slide_time, etc.)
+	- time info
+	- content type? (exclusif, reserve, public, cm_kind)
+	- some kind of id?
+
+Fields needed:
+
+	u_id
+	u_username
+	u_level
+	paid
+	member
+	premium
+	g_id
+	c_id
+	dc_id
+	ct_id
+	c_name
+	c_visible
+	c_disable
+	ces_id
+	fct_id
+	content_type
+	cm_id
+	ce_id
+	t_id
+	slide_id
+	usl_slide_no
+	mobile
+	slide_time (usl_date_out - usl_date_in)
+	conference_type
+	content_type
+	content_qual
+	timestamp
+
+The fields above take care of all the logs that can be generated from user_slide_log{mobile,} and document_library_log (I think, double-check)
+
+We also need to cover stats for other types of content like:
+	
+	- audipodcasts and other types of content
+	- downloads
+	- quiz et tests (resultats)
+	- authors? (if yes, need to include cm_speaker and other fields like that)
+	- 
+
+Explanation of different fields
+
+	- mobile: will be a flag for if the line relates to a mobile stats or not (since the fields are the same for slides viewed in both user_slide_log and user_slide_log_mobile
+	- content_qual: one of exclusif, reserve or public
+	- 
+
+Questions
+	
+	- le champ try, cest quoi?
