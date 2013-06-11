@@ -14,8 +14,10 @@
 ## 	=> script now reads ppt, pptx, doc, docx                 ##
 ## - v1.1                                                        ##
 ##	=> script now shows progress bar                         ##
+## - v2.0							 ##
+##	=> script now takes full csv file and tries to find	 ##
+##	   information on presentation based on name		 ##
 ###################################################################
-
 
 # This script takes a list of pdf files (will us ls of a given directory for list of files)
 # and extracts the text content of each pdf file and writes it on a new line in an output file
@@ -30,16 +32,55 @@ import string as s
 from pptx import Presentation #needed for pptx support!
 import sys #seems to be needed for fixing problem with the try statement for pptx
 import os #will be used for directory listing
+import MySQLdb #needed for mysql integration
+
+host = "192.168.0.6"
+user = "ogilbert"
+password = "thrhhhvthdb"
+schema = "multiwebcast"
+
+db = db=MySQLdb.connect(host=host, user=user, passwd=password, db=schema);
+cursor = db.cursor()
+
+info_query = """
+	SELECT
+		*
+	FROM
+		_40_conference
+	WHERE
+		c_name in %s
+"""
+
+path_to_csv = "/home/akhsig/git/code-home/pdfExtractor/indexation.csv"
+csv = open(path_to_csv, 'r')
+presentations = []
+for line in csv:
+	add = s.split(line, ',')[1];
+	presentations.append(add.strip('"'));
+
+in_filter = '"'+'","'.join(presentations)+'"'
+
+query = """	SELECT
+			*
+		FROM
+			_40_conference
+		WHERE
+			c_name in ("""
+query += in_filter
+query += ')'
+cursor.execute(query)
+
+print cursor.fetchall()
 
 files = []
 texts = []
 problems = []
 toolbar_width = 100
-extract_dir = "/home/akhsig/code/pdfExtractor/files/SIU" # variable for the absolute path to directory for pdf files!
+extract_dir = "/home/akhsig/git/code-home/pdfExtractor/files/SIU" # variable for the absolute path to directory for pdf files!
 
-output_files = open('/home/akhsig/code/pdfExtractor/output_files.txt', 'w')
-output_texts = open('/home/akhsig/code/pdfExtractor/output_texts.txt', 'w')
-output_problems = open('/home/akhsig/code/pdfExtractor/output_problems.txt', 'w')
+output_files = open('/home/akhsig/git/code-home/pdfExtractor/output_files.txt', 'w')
+output_texts = open('/home/akhsig/git/code-home/pdfExtractor/output_texts.txt', 'w')
+output_problems = open('/home/akhsig/git/code-home/pdfExtractor/output_problems.txt', 'w')
 
 #get a list of the words on the GSL
 #this reduces the number of elements 
