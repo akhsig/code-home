@@ -24,6 +24,12 @@
 # If the pdf is encrypted, the script will attempt to decrypt it with the empty password
 # (since we don't need to edit, this should work for most documents!)
 
+# TOOLS NEEDED
+# pypdf2: https://github.com/knowah/PyPDF2/
+# catppt suite: http://www.wagner.pp.ru/~vitus/software/catdoc/
+# python-pptx: https://python-pptx.readthedocs.org/en/latest/index.html
+# python-mysql: http://sourceforge.net/projects/mysql-python/
+
 # First import required packages
 import PyPDF2 as p #must be installed for this script to work
 from subprocess import check_output # needed to run shell commands
@@ -34,50 +40,21 @@ import sys #seems to be needed for fixing problem with the try statement for ppt
 import os #will be used for directory listing
 import MySQLdb #needed for mysql integration
 
-host = "192.168.0.6"
+host = "lecaire"
+port = 3306
 user = "ogilbert"
 password = "thrhhhvthdb"
 schema = "multiwebcast"
 
-db = db=MySQLdb.connect(host=host, user=user, passwd=password, db=schema);
+db = db=MySQLdb.connect(host=host, user=user, passwd=password, port=port, db=schema);
 cursor = db.cursor()
 
-info_query = """
-	SELECT
-		*
-	FROM
-		_40_conference
-	WHERE
-		c_name in %s
-"""
-
-path_to_csv = "/home/akhsig/git/code-home/pdfExtractor/indexation.csv"
-csv = open(path_to_csv, 'r')
-presentations = []
-for line in csv:
-	add = s.split(line, ',')[1];
-	presentations.append(add.strip('"'));
-
-in_filter = '"'+'","'.join(presentations)+'"'
-
-query = """	SELECT
-			*
-		FROM
-			_40_conference
-		WHERE
-			c_name in ("""
-query += in_filter
-query += ')'
-cursor.execute(query)
-
-print cursor.fetchall()
-
+# now that we have the db integration, we create a dict with id from csv file and tuple with all the information
 files = []
-texts = []
+texts = {}
 problems = []
 toolbar_width = 100
 extract_dir = "/home/akhsig/git/code-home/pdfExtractor/files/SIU" # variable for the absolute path to directory for pdf files!
-
 output_files = open('/home/akhsig/git/code-home/pdfExtractor/output_files.txt', 'w')
 output_texts = open('/home/akhsig/git/code-home/pdfExtractor/output_texts.txt', 'w')
 output_problems = open('/home/akhsig/git/code-home/pdfExtractor/output_problems.txt', 'w')
@@ -96,74 +73,60 @@ gsl.close()
 #now make it a set!
 gsl_words = set(gsl_words_list)
 
-test = os.listdir(extract_dir)
 prefix = extract_dir
+if prefix[len(prefix)-1] != "/":
+	prefix += "/"
 
-for f in test:
-	if prefix[len(prefix)-1] != "/":
-		prefix += "/"
-	files.append(prefix+f)
-#lines = test.split("\n")
-'''
-print "Parsing output of ls -lR"
+pres_dict = {}
+presentations = []
+# first thing we do is create a basic dict with id and in tuple: title, location
 
-# setup toolbar
-sys.stdout.write("[%s]" % (" " * toolbar_width))
-sys.stdout.flush()
-sys.stdout.write("\b" * (toolbar_width+1)) # return to start of line, after '['
+path_to_csv = "/home/akhsig/git/code-home/pdfExtractor/indexation.csv"
+csv = open(path_to_csv, 'r')
+for line in csv:
+	fields = s.split(line, ',')
+	docid = fields[0]
+	title = fields[1]
+	loc = fields[2]
+	location = prefix+s.split(loc, '/')[-1]
+	pres_dict[title] = location
+	presentations.append(title.strip('"'))
 
-line_count = float(len(lines))
-tmp = 0
-current = 0
+in_filter = '"'+'","'.join(presentations)+'"'
 
-for line in lines:
-	#parse the output of ls -Rl
-	tmp += 1
-	if line:
-		if line[0] == "t":
-			#do nothing, this means the line is not an actual file
-			pass
-		elif line[0] == "/":
-			#this means we have a new prefix!
-			prefix = line.split(":")[0]
-		else:
-			#this is a good file so we need to get only the filename!
-			fil = s.split(line," ",8)
-			print fil
-			if "" in fil:
-				#because certain filenames are shorter than others, ls will add spaces to its output so that everything looks good
-				#we need to account for the number of spaces added in order to be able to isolate only the filename!
-				fil = s.split(fil[8], " ", fil.count("") )[fil.count("")]
-			else:
-				fil = fil[8]
-			if prefix[len(prefix)-1] != "/":
-				prefix += "/"
-			files.append(prefix+fil)
-	temp = tmp/line_count * 100
-	if temp > current:
-		for i in range(int(temp-current)):
-			sys.stdout.write("-")
-    			sys.stdout.flush()
-		current = temp
+query = """     SELECT
+                        _40_conference.c_id,
+			_40_conference.c_name
+                FROM
+                        _40_conference
+		INNER JOIN
+			_40_conference_event_group
+			ON _40_conference.ce_id = _40_conference_event_group.ce_id
+                WHERE
+			_40_conference_event_group.g_id = 184 AND
+                        _40_conference.c_name in ("""
+query += in_filter
+query += ')'
+cursor.execute(query)
 
-sys.stdout.write("\n")
+result = cursor.fetchall()
+result_dict = {x[1]: x[0] for x in result}
 
-#now, we have the filenames, so we can open them!
-#consider all possible document types
-'''
+# in result_dict, we now have all the information for each presentation indexed by presentation title (found in presentations)
+
 print "Reading and parsing files"
-
-# setup toolbar
-#sys.stdout.write("[%s]" % (" " * toolbar_width))
-#sys.stdout.flush()
-#sys.stdout.write("\b" * (toolbar_width+1)) # return to start of line, after '['
-files_len = float(len(files))
+ 
+files_len = float(len(presentations))
 current = 0
 tmp = 0
 
-for f in files:
+for pres in presentations:
+	if pres in pres_dict.keys():
+		f = pres_dict[pres]
+	else:
+		continue
 	tmp += 1
-	sys.stdout.write("\b" * (len(str(current))+1))
+	#sys.stdout.write("\b" * (len(str(current))+1))
 	text = ""
 	ext = f.split('.')[f.count('.')]
 	if ext == "ppt":
@@ -176,9 +139,9 @@ for f in files:
 			#files.remove(f)
 		else:
 			#we don't have an error, out contains content of document
-			out = set(s.replace(out,"\n"," ").encode('utf-8').lower().split())
+			out = set(s.replace(out,"\n"," ").replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace(":", "").replace("'", "").encode('utf-8').lower().split())
 			#out -= gsl_words
-			texts.append(s.join(out," "))
+			texts[pres] = s.join(out," ")
 	elif ext == "pptx":
 		#for pptx, use a try since there seems to be many things that can go wrong with py-pptx...
 		try:
@@ -199,9 +162,10 @@ for f in files:
        				for paragraph in shape.textframe.paragraphs:
 					for run in paragraph.runs:
        	        				out += run.text+" "
-		out = set(s.replace(out, "\n", " ").encode('utf-8').lower().split())
+		out = set(s.replace(out, "\n", " ").replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace(":", "").replace("'", "").encode('utf-8').lower().split())
 		#out -= gsl_words
-		texts.append(s.join(out, " "))
+		#texts.append(s.join(out, " "))
+		texts[pres] = s.join(out," ")
 	elif ext == "doc":
 		#we have a doc file, use catdoc! if it doesnt work, we should get a segfault!
 		try:
@@ -217,9 +181,10 @@ for f in files:
 			#files.remove(f)
 		else:
 			#we have an output! parse it a little and add it to texts!
-			out = set(s.replace(out, "\n", " ").encode('utf-8').lower().split())
+			out = set(s.replace(out, "\n", " ").replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace(":", "").replace("'", "").encode('utf-8').lower().split())
 			#out -= gsl_words
-			texts.append(s.join(out, " "))
+			#texts.append(s.join(out, " "))
+			texts[pres] = s.join(out," ")
 	elif ext == "docx":
 		#we have a docx, use the perl script to try and extract content
 		out = check_output(['/usr/bin/docx2txt.pl', f, '-'], stderr=sp.STDOUT)
@@ -227,12 +192,13 @@ for f in files:
 			#we have an error, add to problems!
 			print f+" will be added to problems!"
                         problems.append(f)
-			#files.remove(f)
+			#files.remove(f)http://sourceforge.net/projects/mysql-python/
 		else:
 			#out contains the output of the file
-			out = set(s.replace(out, "\n", " ").encode('utf-8').lower().split())
+			out = set(s.replace(out, "\n", " ").replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace(":", "").replace("'", "").encode('utf-8').lower().split())
                         #out -= gsl_words
-                        texts.append(s.join(out, " "))
+                        #texts.append(s.join(out, " "))
+			texts[pres] = s.join(out," ")
 	#elif ext == "xls":  #for now dont need to support these files...
 	#elif ext == "xlsx":
 	elif ext == "pdf":
@@ -244,10 +210,11 @@ for f in files:
 		page_num = pdf.getNumPages()
 		for i in range(page_num):
 			page = pdf.getPage(i)
-			text += s.replace(page.extractText(),"\n"," ")
+			text += s.replace(page.extractText(),"\n"," ").replace(".", "").replace(",", "").replace("!", "").replace("?", "").replace(":", "").replace("'", "")
 		text = set(text.encode('utf-8').lower().split())
 		#text -= gsl_words
-		texts.append(s.join(text, " "))
+		#texts.append(s.join(text, " "))
+		texts[pres] = s.join(text," ")
 	else: 
 		#file type is something else
 		#for now, add file to problems
@@ -267,6 +234,9 @@ sys.stdout.write("\n")
 
 #now, we should have the content of all the files that could be opened and read and problems should be populated with files that need to be checked manually
 
+print "Updating database!"
+
+'''
 print "Printing output to files!"
 
 files = [x for x in files if x not in problems]
@@ -283,4 +253,27 @@ for f in files:
 output_problems.close()
 output_texts.close()
 output_files.close()
+'''
+
+insert_query = """
+
+	INSERT INTO `z_siu_content_index_20130614` (
+		c_id,
+		content
+	)
+	VALUES
+		
+"""
+
+for key in result_dict.keys():
+	if key in texts.keys():
+		insert_query += "("+str(result_dict[key])+",'"+str(texts[key])+"'),\n"
+
+insert_query = insert_query.rstrip(",")
+
+output_texts.write(insert_query)
+output_texts.close()
+
+cursor.execute(insert_query)
+
 
